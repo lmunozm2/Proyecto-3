@@ -1,232 +1,168 @@
 import dash
 from dash import dcc  # dash core components
 from dash import html # dash html components
-from dash.dependencies import Input, Output
-import tensorflow as tf
+from dash.dependencies import Input, Output, State
 import keras
 import numpy as np
 import pandas as pd
 import plotly.express as px
-from plotly.subplots import make_subplots
 import plotly.graph_objs as go
 import matplotlib.pyplot as plt
 from dotenv import load_dotenv # pip install python-dotenv
 import os
 import psycopg2
+import seaborn as sns
+import io
+import base64
+import tensorflow as tf
+from keras.models import load_model
+import joblib
+
 
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 
 app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
-server = app.server
-env_path="C://Users//angie//OneDrive//Desktop//Octavo semestre//Analitica computacional//Proyecto 2 personal//env//app.env"
-#load env 
-load_dotenv(dotenv_path=env_path)
-#extract env variables
-USER=os.getenv('USER')
-PASSWORD=os.getenv('PASSWORD')
-HOST=os.getenv('HOST')
-PORT=os.getenv('PORT')
-DBNAME=os.getenv('DBNAME')
-engine = psycopg2.connect(
-    dbname=DBNAME,
-    user=USER,
-    password=PASSWORD,
-    host=HOST,
-    port=PORT
-)
 
+#Datos
+df = pd.read_csv("C:\\Users\\LORE\\Downloads\\Soporte_4\\datos_final.csv", sep=';')
 
 # cargar archivo de disco
-model = tf.keras.models.load_model("models/modelo.h5")
+model = tf.keras.models.load_model("C:\\Users\\LORE\\Downloads\\Soporte_4\\Modelito_Triunfando.h5")
 
-#Hasta aqui todo esta bien
-#GRAFICOS
-import pandas.io.sql as sqlio
-cursor = engine.cursor()
-query = """
-SELECT * 
-FROM proy1;"""
-# Calcular el promedio de puntajes para cada materia y clasificación
+#Promedio puntaje por clasificación
+df['clasificacion'] = df['punt_global'].apply(lambda x: 1 if x > 320 else 0)
+materias = ['punt_ingles', 'punt_matematicas', 'punt_c_naturales', 'punt_sociales_ciudadanas', 'punt_lectura_critica']
+promedios_clasificacion = df.groupby('clasificacion')[materias].mean().transpose()
 
-# Configurar la visualización
-plt.figure(figsize=(12, 6))
-
-# Graficar las líneas para cada materia
-def promedio_punt_clasificació(df):
-    promedios_clasificacion = df.groupby('clasificacion')[materias].mean().transpose()
-    plt.figure(figsize=(12,6))
-    for materia in promedios_clasificacion.columns:
-        plt.plot(promedios_clasificacion.index, promedios_clasificacion[materia], marker='o', label=materia)
-  
-    # Configurar título y etiquetas de los ejes
-    plt.title('Promedio de Puntajes por Clasificación')
-    plt.xlabel('Materia')
-    plt.ylabel('Promedio de Puntaje')
-    plt.xticks(rotation=45)  
-    plt.legend()
-    # Mostrar el gráfico
-    plt.tight_layout()
-    plt.show()
-
+def promedio_punt_clasificacion():
+    fig = go.Figure()
+    for materias in promedios_clasificacion.columns:
+        fig.add_trace(go.Scatter(x=promedios_clasificacion.index, y=promedios_clasificacion[materias], mode ='lines+markers', name=materias))
+    fig.update_layout(title='Promedio de Puntajes por Clasificación',
+                      xaxis_title='Materia',
+                      yaxis_title='Promedio de Puntaje',
+                      xaxis_tickangle=-45)
+    return fig    
+    
 #ESTRATO - Puntaje
-plt.figure(figsize=(10, 6))
-# Gráfico de barras para la variable categórica 'estu_genero' con valores encima de las barras
-ax = sns.countplot(x='fami_estratovivienda', hue='clasificacion', data=df, palette='Set2')
-# Configurar título y etiquetas de los ejes
-plt.title('Distribución de clasificación por estrato',fontsize=16, fontweight='bold')
-plt.xlabel('Estrato',fontsize=14)
-plt.ylabel('Frecuencia',fontsize=14)
-# Lista para almacenar los valores únicos de la clasificación
-valores_clasificacion = []
-# Añadir etiquetas con las frecuencias encima de cada barra
-for p in ax.patches:
-      if p.get_height() != 0: 
-        valores_clasificacion.append(p.get_height())
-        ax.annotate(f'{int(p.get_height())}', (p.get_x() + p.get_width() / 2.,
-                                          p.get_height()), ha='center', va='bottom', xytext=(0, 5), 
-                            textcoords='offset points',
-                             color='black', 
-                            bbox=dict(facecolor='white', alpha=0.7, edgecolor='none'))
-# Mostrar el gráfico
-plt.show()
+def distribucion_estrato():
+    fig = px.box(df, x='fami_estratovivienda', y='punt_global', color='clasificacion',
+                 title='Distribución de puntajes por estrato',
+                 labels={'fami_estratovivienda': 'Estrato', 'punt_global': 'Puntaje Global'},
+                 category_orders={'fami_estratovivienda': ['Estrato 1', 'Estrato 2', 'Estrato 3', 'Estrato 4', 'Estrato 5', 'Estrato 6']})
+    fig.update_layout(yaxis_title='Puntaje Global')
+    return fig
 
 #COMPUTADOR - Puntaje
-plt.figure(figsize=(10, 6))
-# Gráfico de barras para la variable categórica 'estu_genero' con valores encima de las barras
-ax = sns.countplot(x='fami_tienecomputador', hue='clasificacion', data=df, palette='Set2')
-# Configurar título y etiquetas de los ejes
-plt.title('Distribución de clasificación por tenencia de computador',fontsize=16, fontweight='bold')
-plt.xlabel('Computador en casa',fontsize=14)
-plt.ylabel('Frecuencia',fontsize=14)
-# Lista para almacenar los valores únicos de la clasificación
-valores_clasificacion = []
-# Añadir etiquetas con las frecuencias encima de cada barra
-for p in ax.patches:
-      if p.get_height() != 0: 
-        valores_clasificacion.append(p.get_height())
-        ax.annotate(f'{int(p.get_height())}', (p.get_x() + p.get_width() / 2.,
-                                          p.get_height()), ha='center', va='bottom', xytext=(0, 5), 
-                            textcoords='offset points',
-                             color='black', 
-                            bbox=dict(facecolor='white', alpha=0.7, edgecolor='none'))
-# Mostrar el gráfico
-plt.show()
-#Dash pasado
-df = sqlio.read_sql_query(query, engine)
-fig_edades = px.histogram(df, x="x5", title="Distribución de Edades")
-fig_edades.update_xaxes(title_text="Edades")
+def distribucion_computador():
+    fig = px.box(df, x='fami_tienecomputador', y='punt_global', color='clasificacion',
+                 title='Distribución de puntajes por tenencia de computador',
+                 labels={'fami_tienecomputador': 'Computador en casa', 'punt_global': 'Puntaje Global'})
+    fig.update_layout(yaxis_title='Puntaje Global')
+    return fig
 
-gender_labels = {1: 'Masculino', 2: 'Femenino'}
-education_labels = {1: 'Posgrado', 2: 'Universidad', 3: 'Bachillerato', 4: 'Otro'}
-marital_status_labels = {1: 'Casado', 2: 'Soltero', 3: 'Otro'}
-categorical_columns = ['x2', 'x3', 'x4']
-
-# Obtener las frecuencias de las variables categóricas
-gender_freq = df['x2'].map(gender_labels).value_counts()
-education_freq = df['x3'].map(education_labels).value_counts()
-marital_status_freq = df['x4'].map(marital_status_labels).value_counts()
-
-# Crear gráficos de barras
-gender_fig = go.Figure(data=[go.Bar(x=gender_freq.index, y=gender_freq.values, marker=dict(color='lightgreen'))])
-gender_fig.update_layout(title=' Género')
-
-education_fig = go.Figure(data=[go.Bar(x=education_freq.index, y=education_freq.values, marker=dict(color='salmon'))])
-education_fig.update_layout(title='Nivel de Educación')
-
-marital_status_fig = go.Figure(data=[go.Bar(x=marital_status_freq.index, y=marital_status_freq.values, marker=dict(color='skyblue'))])
-marital_status_fig.update_layout(title='Estado Civil')
+#UBICACIÓN
+def distribucion_ubicacion():
+    fig = px.histogram(df, x='cole_area_ubicacion', color='clasificacion', barmode='group',
+                       title='Distribución de clasificación por ubicacion',
+                       labels={'cole_area_ubicacion': 'Ubicación', 'count': 'Frecuencia'})
+    fig.update_layout(yaxis_title='Frecuencia')
+    return fig 
 
 # Layout de la aplicación Dash
 app.layout = html.Div([
-    html.H1("Predicción de modelo", style={'font-family': 'Calibri Light'}),
-    html.Div([
+    html.Div([        
+        html.H1("Predicción y Análisis de Puntaje del Icfes en el Departamento del Valle del Cauca", style={'font-family': 'Calibri Light'}),       
+    ], style={'posotion':'relative'}),
+    
+        html.Div([
         
         # Familia tiene computador
         html.Div([
             html.Label('Tiene computador'),
             dcc.Dropdown(
-                id='fami_tienecomputador-dropdown',
+                id='fami-tienecomputador-dropdown',
                 options=[
                     {'label': 'No', 'value': 'No'},
                     {'label': 'Si', 'value': 'Si'}
                 ],
-                value='No'
+                value=1
             ),
         ], style={'width': '25%', 'display': 'inline-block'}),
         # BILINGÜE 
         html.Div([
             html.Label('Colegio bilingüe'),
             dcc.Dropdown(
-                id='cole_bilingue-dropdown',
+                id='cole-bilingue-dropdown',
                 options=[
                     {'label': 'No', 'value': 'N'},
                     {'label': 'Si', 'value': 'S'}
                 ],
-                value='N'
+                value=1
             ),
         ],style={'width': '25%', 'display': 'inline-block'}),
         # UBICACIÓN
         html.Div([    
             html.Label('Área de ubicación'),
             dcc.Dropdown(
-                id='cole_area_ubicacion-dropdown',
+                id='cole-area-ubicacion-dropdown',
                 options=[
                     {'label': 'Urbano', 'value': 'URBANO'},
                     {'label': 'Rural', 'value': 'RURAL'}
                 ],
-                value='URBANO'
+                value=1
             ),
         ],style={'width': '25%', 'display': 'inline-block'}),
         #GENERO DEL ESTUDIANTE
         html.Div([    
             html.Label('Género del estudiante'),
             dcc.Dropdown(
-                id='estu_genero-dropdown',
+                id='estu-genero-dropdown',
                 options=[
                     {'label': 'Femenino', 'value': 'F'},
                     {'label': 'Masculino', 'value': 'M'}
                 ],
-                value='F'
+                value=1
             ),
         ],style={'width': '25%', 'display': 'inline-block'}),
         #ESTRATO
         html.Label('Estrato'),
         dcc.Dropdown(
-            id='fami_estratovivienda-dropdown',
+            id='fami-estratovivienda-dropdown',
             options=[
-                {'label': 'Estrato 1', 'value':'Estrato 1' },
-                {'label': 'Estrato 2', 'value': 'Estrato 2'},
-                {'label': 'Estrato 3', 'value': 'Estrato 3'},
-                {'label': 'Estrato 4', 'value': 'Estrato 4'},
-                {'label': 'Estrato 5', 'value': 'Estrato 5'},
-                {'label': 'Estrato 6', 'value': 'Estrato 6'}
+                {'label': '1', 'value': 'Estrato 1'},
+                {'label': '2', 'value': 'Estrato 2'},
+                {'label': '3', 'value': 'Estrato 3'},
+                {'label': '4', 'value': 'Estrato 4'},
+                {'label': '5', 'value': 'Estrato 5'},
+                {'label': '6', 'value': 'Estrato 6'}
             ],
-            value='Estrato 1'
+            value=1
         ),
-        #AGOSTO (X7)
+        #NATURALEZA DEL COLEGIO)
         html.Label('Naturaleza del colegio'),
         dcc.Dropdown(
-            id='cole_naturaleza-dropdown',
+            id='cole-naturaleza-dropdown',
             options=[
                 {'label': 'Oficial', 'value': 'OFICIAL'},
                 {'label': 'No Oficial', 'value': 'NO OFICIAL'}
             ],
-            value='OFICIAL'
+            value=1
         ),
         #INTERNET
         html.Label('Tiene internet'),
         dcc.Dropdown(
-            id='fami_tieneinternet-dropdown',
+            id='fami-tieneinternet-dropdown',
             options=[
                 {'label': 'No', 'value': 'No'},
                 {'label': 'Si', 'value': 'Si'}
             ],
-            value='No'
+            value=1
         ),
         #EDUCACION DEL PADRE
         html.Label('Educación del padre'),
         dcc.Dropdown(
-            id='fami_educacionpadre-dropdown',
+            id='fami-educacionpadre-dropdown',
             options=[
                 {'label': 'Educación profesional completa', 'value': 'Educación profesional completa'},
                 {'label': 'Educación profesional incompleta', 'value': 'Educación profesional incompleta'},
@@ -242,12 +178,12 @@ app.layout = html.Div([
                 {'label': 'Técnica o tecnológica incompleta', 'value': 'Técnica o tecnológica incompleta'},
                 
             ],
-            value='Educación profesional completa'
+            value=1
         ),
         #EDUCACION MADRE
         html.Label('Educación de la madre'),
         dcc.Dropdown(
-            id='fami_educacionmadre-dropdown',
+            id='fami-educacionmadre-dropdown',
             options=[
                 {'label': 'Educación profesional completa', 'value': 'Educación profesional completa'},
                 {'label': 'Educación profesional incompleta', 'value': 'Educación profesional incompleta'},
@@ -263,41 +199,8 @@ app.layout = html.Div([
                 {'label': 'Técnica o tecnológica incompleta', 'value': 'Técnica o tecnológica incompleta'},
                 
             ],
-            value='Educación profesional completa'
-        ),
-
-        # VARIABLES CONTINUAS PUNTOS
-        
-        #INGLES
-        html.Div([
-            html.Label('Puntos de inglés'),
-            dcc.Input(id='punt_ingles-input', type='number', min=0, max=100, step=1, value=0),
-        ], style = {'width': '20%', 'display': 'inline-block', 'margin': 'auto'}),
-        
-        #MATEMATICAS
-        html.Div([
-            html.Label('Puntos de matemáticas'),
-            dcc.Input(id='punt_matematicas-input', type='number', min=0, max=100, step=1, value=0),
-        ], style = {'width': '20%', 'display': 'inline-block', 'margin': 'auto'}),
-        
-        #SOCIALES Y CIUDADANAS 
-        html.Div([
-            html.Label('Puntos de sociales y ciudadanas'),
-            dcc.Input(id='punt_sociales_ciudadanas-input', type='number', min=0, max=100, step=1, value=0),
-        ], style = {'width': '20%', 'display': 'inline-block', 'margin': 'auto'}),
-        
-        #CIENCIAS NATURALES
-        html.Div([
-            html.Label('Puntos de ciencias naturales'),
-            dcc.Input(id='punt_c_naturales-input', type='number', min=0, max=100, step=1, value=0),
-        ], style = {'width': '20%', 'display': 'inline-block', 'margin': 'auto'}),
-        
-        #LECTURA CRITICA
-        html.Div([
-            html.Label('Puntos de lectura crítica'),
-            dcc.Input(id='punt_lectura_critica-input', type='number', min=0, max=100, step=1, value=0),
-        ], style = {'width': '20%', 'display': 'inline-block', 'margin': 'auto'}),
-        
+            value=1
+        ),       
         
         html.Button('Predecir', id='button', style={'display': 'block', 'margin': 'auto'}),
         html.Div(id='output-prediction', style = {'fontsize':'24px','textAlign': 'center', 'font-weight': 'bold'})
@@ -307,67 +210,81 @@ app.layout = html.Div([
     
     html.H2("Gráficos de interés", style={'font-family': 'Calibri Light'}),
     html.Div([
-        html.Div(dcc.Graph(figure=fig_edades), style={'display': 'inline-block', 'width': '25%'}),
-        html.Div(dcc.Graph(figure=gender_fig), style={'display': 'inline-block', 'width': '25%'}),
-        html.Div(dcc.Graph(figure=education_fig), style={'display': 'inline-block', 'width': '25%'}),
-        html.Div(dcc.Graph(figure=marital_status_fig), style={'display': 'inline-block', 'width': '25%'})
+        html.Div(dcc.Graph(figure=promedio_punt_clasificacion()), style={'display': 'inline-block', 'width': '50%'}),
+        html.Div(dcc.Graph(figure=distribucion_estrato()), style={'display': 'inline-block', 'width': '50%'})
+    ]),
+    html.Div([
+        html.Div(dcc.Graph(figure=distribucion_computador()), style={'display': 'inline-block', 'width': '50%'}),
+        html.Div(dcc.Graph(figure=distribucion_ubicacion()), style={'display': 'inline-block', 'width': '50%'})
     ])
 
 ], style={'font-family': 'Calibri Light'})
 
 
+# Cargar el pipeline desde el archivo 'pipeline.pkl'
+pipeline = joblib.load("C:\\Users\\LORE\\Downloads\\Soporte_4\\pipeline.pkl")
+
 # Callback para realizar la predicción
 @app.callback(
     Output('output-prediction', 'children'),
     [Input('button', 'n_clicks')],
-    [dash.dependencies.State('fami_tienecomputador-dropdown', 'value'),
-     dash.dependencies.State('cole_bilingue-dropdown', 'value'),
-     dash.dependencies.State('cole_area_ubicacion-dropdown', 'value'),
-     dash.dependencies.State('estu_genero-dropdown', 'value'),
-     dash.dependencies.State('fami_estratovivienda-dropdown', 'value'),
-     dash.dependencies.State('cole_naturaleza-dropdown', 'value'),
-     dash.dependencies.State('fami_tieneinternet-dropdown', 'value'),
-     dash.dependencies.State('fami_educacionpadre-dropdown', 'value'),
-     dash.dependencies.State('fami_educacionmadre-dropdown', 'value'),
-     dash.dependencies.State('punt_ingles-input', 'value'),
-     dash.dependencies.State('punt_matematicas-input', 'value'),
-     dash.dependencies.State('punt_sociales_ciudadanas-input', 'value'),
-     dash.dependencies.State('punt_c_naturales-input', 'value'),
-     dash.dependencies.State('punt_lectura_critica-input', 'value')]
-    
+    [dash.dependencies.State('fami-tienecomputador-dropdown', 'value'),
+     dash.dependencies.State('cole-bilingue-dropdown', 'value'),
+     dash.dependencies.State('cole-area-ubicacion-dropdown', 'value'),
+     dash.dependencies.State('estu-genero-dropdown', 'value'),
+     dash.dependencies.State('fami-estratovivienda-dropdown', 'value'),
+     dash.dependencies.State('cole-naturaleza-dropdown', 'value'),
+     dash.dependencies.State('fami-tieneinternet-dropdown', 'value'),
+     dash.dependencies.State('fami-educacionpadre-dropdown', 'value'),
+     dash.dependencies.State('fami-educacionmadre-dropdown', 'value')]
 )
 
-def predict(n_clicks, fami_tienecomputador, cole_bilingue, cole_area_ubicacion, estu_genero, fami_estratovivienda, cole_naturaleza, fami_tieneinternet, 
-            fami_educacionpadre, fami_educacionmadre, punt_ingles, punt_matematicas, punt_sociales_ciudadanas, punt_c_naturales, punt_lectura_critica):
-    if n_clicks is None:
-        return ''
-    
-    # Combinar las variables categóricas y continuas en un solo vector de entrada
-    input_values = [fami_tienecomputador, cole_bilingue, cole_area_ubicacion, estu_genero, fami_estratovivienda, cole_naturaleza, fami_tieneinternet, 
-            fami_educacionpadre, fami_educacionmadre, punt_ingles, punt_matematicas, punt_sociales_ciudadanas, punt_c_naturales, punt_lectura_critica]
-    
-    # Preprocesar los valores ingresados (por ejemplo, escalarlos)
-    input_values = np.array([input_values])  # Formato de entrada esperado por el modelo
-    
-    
-    print("Datos de entrada:", input_values)
-    print("Forma de los datos de entrada:", input_values.shape)
+def update_prediction(n_clicks, fami_tienecomputador,cole_bilingue, cole_area_ubicacion, estu_genero, fami_estratovivienda, cole_naturaleza, fami_tieneinternet, 
+            fami_educacionpadre, fami_educacionmadre):
+    # Preprocess user input data
+    if n_clicks is not None:
+        user_input = {
+            'fami_tienecomputador': [fami_tienecomputador],
+            'cole_bilingue': [cole_bilingue],
+            'cole_area_ubicacion' : [cole_area_ubicacion],
+            'estu_genero': [estu_genero],
+            'fami_estratovivienda' : [fami_estratovivienda],
+            'cole_naturaleza' : [cole_naturaleza],
+            'fami_tieneinternet' : [fami_tieneinternet],
+            'fami_educacionpadre': [fami_educacionpadre],
+            'fami_educacionmadre': [fami_educacionmadre],
+        }
+            
+        print(user_input)
 
-    # Realizar la predicción
-    prediction = model.predict(input_values)
-    predicted_probability = prediction[0, 1]  
-    predicted_probability2 = prediction[0, 0]  
-    print(predicted_probability)
-    print(predicted_probability2)
-    
-    # Aquí puedes procesar la salida de la predicción según sea necesario
-    # Por ejemplo, mostrar el resultado
-    if prediction[0][0] < prediction[0][1]:
-        result = "Riesgo de incumplimiento de pago"
-    else:
-        result = "Sin riesgo de incumplimiento de pago"
-    
-    return f'Predicción: {result}'
+        pipeline = joblib.load("C:\\Users\\LORE\\Downloads\\Soporte_4\\pipeline.pkl")
+
+        user_input = pd.DataFrame(user_input)
+
+        model_input = pipeline.transform(user_input)
+   
+        # Realizar la predicción
+        prediction = model.predict(model_input)
+
+        
+        # Umbral para la predicción
+        umbral = 0.7
+        
+        # Obtener la probabilidad
+        
+        predicted_probability = prediction[0, 0]
+
+        binary_prediction = 1 if predicted_probability > umbral else 0
+
+        # Procesar la salida de la predicción según sea necesario
+        if binary_prediction == 1:
+            result = "Puntaje mayor a 320"
+        else:
+            result = "Puntaje menor a 320"
+
+        return f'Predicción: {result} con una probabilidad de {predicted_probability:.2f}'
+
+
 
 if __name__ == '__main__':
     app.run_server(debug=True)
